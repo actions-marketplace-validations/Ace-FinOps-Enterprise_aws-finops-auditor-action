@@ -83,7 +83,7 @@ runs:
                 f.write("## AWS FinOps Cost Audit Summary\n\n")
                 f.write(f"- **Recoverable Monthly Spend:** `${monthly:,.2f}/mo`\n")
                 f.write(f"- **Annualized Impact:** `${annual:,.2f}/yr`\n\n")
-                f.write("> Need multi-account AWS Organization scanning, PDF executive showback reports, or 1-click bash remediation scripts? [Upgrade to Practitioner / Agency](https://aisser.gumroad.com/l/krgac)\n")
+                f.write("> Need multi-account AWS Organization scanning, PDF executive showback reports, or 1-click bash remediation scripts? [Upgrade to Practitioner ($149/yr) / Agency ($999/yr)](https://aisser.gumroad.com/l/krgac?utm_source=github_action)\n")
 
         if proc.returncode != 0:
             sys.exit(proc.returncode)
