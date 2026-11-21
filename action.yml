@@ -10,14 +10,22 @@ inputs:
     description: 'Optional CSV file path for offline/demo mode instead of live AWS API calls'
     required: false
     default: ''
+  region:
+    description: 'AWS region(s) to scan in live mode, comma-separated (default: us-east-1)'
+    required: false
+    default: 'us-east-1'
   fail-on-waste:
-    description: 'Fail workflow if monthly waste in USD exceeds this threshold (e.g., 100). Empty disables failure.'
+    description: 'Fail workflow if monthly waste in USD exceeds this threshold (e.g., 100). Empty disables failure. Pro feature: requires gumroad_license_key.'
+    required: false
+    default: ''
+  gumroad_license_key:
+    description: 'Optional Gumroad license key (Pro subscription). Pass it as a repository secret named GUMROAD_LICENSE_KEY. Unlocks Bash remediation artifacts, CSV compliance exports, and fail-on-waste threshold enforcement.'
     required: false
     default: ''
   package-version:
     description: 'PyPI version constraint for aws-finops-auditor'
     required: false
-    default: '>=1.0.0'
+    default: '>=1.2.0'
 
 outputs:
   monthly-waste:
@@ -44,7 +52,9 @@ runs:
       shell: bash
       env:
         INPUT_FILE: ${{ inputs.file }}
+        INPUT_REGION: ${{ inputs.region }}
         FAIL_THRESHOLD: ${{ inputs.fail-on-waste }}
+        GUMROAD_LICENSE_KEY: ${{ inputs.gumroad_license_key }}
       run: |
         python3 - << 'EOF'
         import os, re, subprocess, sys
@@ -53,6 +63,19 @@ runs:
         input_file = os.environ.get("INPUT_FILE", "").strip()
         if input_file:
             cmd.extend(["--file", input_file])
+        else:
+            # No file: run a live scan against the AWS account (1.2.0+).
+            cmd.append("--live")
+            region = os.environ.get("INPUT_REGION", "").strip()
+            if region:
+                cmd.extend(["--region", region])
+        # Only add the Pro flags when a key is present: passed without a
+        # key they would hit the verifier's upsell exit and break free runs.
+        if os.environ.get("GUMROAD_LICENSE_KEY", "").strip():
+            cmd.extend(["--remediate", "--compliance"])
+        thresh = os.environ.get("FAIL_THRESHOLD", "").strip()
+        if thresh:
+            cmd.extend(["--fail-on-waste", thresh])
 
         proc = subprocess.run(cmd, capture_output=True, text=True)
         output = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
@@ -60,8 +83,9 @@ runs:
 
         monthly = 0.0
         for pattern in [
+            r"TOTAL PROJECTED MONTHLY LEAK:\s*\$([0-9,]+\.[0-9]{2})",
+            r"Total Waste Identified:\s*\$([0-9,]+\.[0-9]{2})",
             r"TOTAL POTENTIAL SAVINGS:\s*\$([0-9,]+\.[0-9]{2})",
-            r"Identified \$([0-9,]+\.[0-9]{2})/mo",
             r"Total Monthly Waste:\s*\$([0-9,]+\.[0-9]{2})",
         ]:
             m = re.search(pattern, output, re.IGNORECASE)
@@ -87,9 +111,4 @@ runs:
 
         if proc.returncode != 0:
             sys.exit(proc.returncode)
-
-        thresh = os.environ.get("FAIL_THRESHOLD", "").strip()
-        if thresh and monthly > float(thresh):
-            print(f"::error::Monthly AWS waste (${monthly:,.2f}) exceeded threshold (${float(thresh):,.2f}).")
-            sys.exit(1)
         EOF
