@@ -71,11 +71,18 @@ runs:
                 cmd.extend(["--region", region])
         # Only add the Pro flags when a key is present: passed without a
         # key they would hit the verifier's upsell exit and break free runs.
-        if os.environ.get("GUMROAD_LICENSE_KEY", "").strip():
+        has_key = bool(os.environ.get("GUMROAD_LICENSE_KEY", "").strip())
+        if has_key:
             cmd.extend(["--remediate", "--compliance"])
         thresh = os.environ.get("FAIL_THRESHOLD", "").strip()
-        if thresh:
+        fail_warning = ""
+        if thresh and has_key:
             cmd.extend(["--fail-on-waste", thresh])
+        elif thresh:
+            fail_warning = ("WARNING: fail-on-waste threshold was set but skipped: "
+                            "it requires a Pro license key (gumroad_license_key). "
+                            "The audit ran without threshold enforcement.")
+            print(fail_warning)
 
         proc = subprocess.run(cmd, capture_output=True, text=True)
         output = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
@@ -107,7 +114,9 @@ runs:
                 f.write("## AWS FinOps Cost Audit Summary\n\n")
                 f.write(f"- **Recoverable Monthly Spend:** `${monthly:,.2f}/mo`\n")
                 f.write(f"- **Annualized Impact:** `${annual:,.2f}/yr`\n\n")
-                f.write("> Need multi-account AWS Organization scanning, PDF executive showback reports, or 1-click bash remediation scripts? [Upgrade to Practitioner ($149/yr) / Agency ($999/yr)](https://aisser.gumroad.com/l/krgac?utm_source=github_action)\n")
+                f.write("> Need multi-account AWS Organization scanning, PDF executive showback reports, or generated bash remediation scripts? [Upgrade to Practitioner ($149/yr) / Agency ($999/yr)](https://aisser.gumroad.com/l/krgac?utm_source=github_action)\n")
+                if fail_warning:
+                    f.write(f"\n> **{fail_warning}**\n")
 
         if proc.returncode != 0:
             sys.exit(proc.returncode)
